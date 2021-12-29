@@ -17,6 +17,7 @@ import random
 import os
 import copy
 import numpy as np
+from enum import Enum
 
 # import basic pygame modules
 import pygame as pg
@@ -40,10 +41,15 @@ PILLSIZE = pg.Rect(0, 0, 16, 32)
 BOARD_ROWS = 16
 BOARD_COLS = 8
 PLAYABLERECT = pg.Rect(96 * SPRITERATIO, 80 * SPRITERATIO, BOARD_COLS * 16, BOARD_ROWS * 16) #pg.Rect(96 * SPRITERATIO, 80 * SPRITERATIO, 64 * SPRITERATIO, 128 * SPRITERATIO)
+START_ROW = 0
+START_COL = 4
 
 # temporary constants (should be configurable)
 GAMESPEED = 1000
-LEVEL = 17
+LEVEL = 20
+
+# generate the game board
+gameBoard = np.zeros((16,8))
 
 main_dir = os.path.split(os.path.abspath(__file__))[0]
 
@@ -76,95 +82,125 @@ def load_image_from_spritesheet(spritesheet, rect):
     image.blit(spritesheet, (0, 0), rect)
     return image
 
+def isColliding(row, col, orient):
+    if gameBoard[row][col] != 0:
+        return True
+    if orient == Orientation.VERTICAL and gameBoard[row+1][col] != 0:
+        return True
+    if orient == Orientation.HORIZONTAL and gameBoard[row][col+1] != 0:
+        return True
+    return False
 
 
 # Classes
 class Virus(pg.sprite.Sprite):   
-    def __init__(self, board, virusEligibleRect):
+    def __init__(self, virusEligibleRect):
         pg.sprite.Sprite.__init__(self, self.containers)
         self.frame = 1
         self.animcycle = 2
-        self.color = random.choice(['red','yellow','blue'])
-        if (self.color == 'red'):
+        self.color = random.choice(list(Colour))
+        if (self.color == Colour.RED):
             self.image = self.redVirusImages[self.frame // self.animcycle % 2]
-        elif (self.color == 'yellow'):
+        elif (self.color == Colour.YELLOW):
             self.image = self.yellowVirusImages[self.frame // self.animcycle % 2]
-        else:
+        elif (self.color == Colour.BLUE):
             self.image = self.blueVirusImages[self.frame // self.animcycle % 2]
-        self.rect = self.image.get_rect()
+        else:
+            logging.warning("Virus init returned an invalid colour")
 
         # spawn virus on the board
         while (1):
-            self.rect.top = random.choice(range(virusEligibleRect.top,virusEligibleRect.bottom,16))
-            self.rect.left = random.choice(range(virusEligibleRect.left,virusEligibleRect.right,16))
-            if not pg.sprite.spritecollideany(self, board):
+            row = random.randint(virusEligibleRect.x, virusEligibleRect.x + virusEligibleRect.height - 1) 
+            col = random.randint(0,virusEligibleRect.width - 1)
+            if gameBoard[row][col] == 0:
+                gameBoard[row][col] = self.color.value
                 break;
+        
+        self.rect = self.image.get_rect()
+        self.rect.top = PLAYABLERECT.y + (row * 16)
+        self.rect.left = PLAYABLERECT.x + (col * 16)
 
     def update(self):
         self.frame += 1
         self.animcycle = 2
-        if (self.color == 'red'):
+        if (self.color == Colour.RED):
             self.image = self.redVirusImages[self.frame // self.animcycle % 2]
-        elif (self.color == 'yellow'):
+        elif (self.color == Colour.YELLOW):
             self.image = self.yellowVirusImages[self.frame // self.animcycle % 2]
-        else:
+        elif (self.color == Colour.BLUE):
             self.image = self.blueVirusImages[self.frame // self.animcycle % 2]
+        else:
+            logging.warning("Virus update returned an invalid colour")
+
+class Colour(Enum):
+    RED = 1
+    YELLOW = 2
+    BLUE = 3
+
+class Orientation(Enum):
+    VERTICAL = 0
+    HORIZONTAL = 1
+
 
 class Pill(pg.sprite.Sprite):
     def __init__(self, board):
         pg.sprite.Sprite.__init__(self, self.containers)
         self.image = self.build_pill() 
         self.rect = self.image.get_rect()
-        self.rect.top = PLAYABLERECT.top
-        entryOffset = PILLSIZE.width if bool(random.getrandbits(1)) else 0
-        self.rect.left = PLAYABLERECT.left + (PLAYABLERECT.width / 2) - entryOffset
+        self.row = START_ROW
+        self.col = START_COL
+        self.orient = Orientation.VERTICAL
 
+    def update(self):
+        self.rect.top = (self.row * 16) + PLAYABLERECT.y 
+        self.rect.left = (self.col * 16) + PLAYABLERECT.x
+        
     def build_pill(self):
         pill = pg.Surface(PILLSIZE.size)
         pill.blit(random.choice(self.images), (1,1))
         pill.blit(pg.transform.flip(random.choice(self.images), flip_x=False, flip_y=True), (1,15))
         return pill
 
+
     def move_left(self, board):
-        initialPosition = copy.copy(self.rect)
-        self.rect.move_ip(-MOVEINCREMENT, 0)
-        logging.debug("Current position: %s", initialPosition)
-        logging.debug("Projected position: %s", self.rect)
-        if (self.rect.left < PLAYABLERECT.left or pg.sprite.spritecollideany(self, board)):
-            self.rect = initialPosition
-            return False
-        return True
+        logging.debug("Current position: (%d,%d)", self.row, self.col)
+        if (self.col > 0 and not isColliding(self.row,self.col-1,self.orient)):
+            self.col -= 1
+            logging.debug("New position: (%d,%d)", self.row, self.col)
+            return True
+        return False
             
     def move_right(self, board):
-        initialPosition = copy.copy(self.rect)
-        self.rect.move_ip(MOVEINCREMENT, 0)
-        logging.debug("Current position: %s", initialPosition)
-        logging.debug("Projected position: %s", self.rect)
-        if (self.rect.right > PLAYABLERECT.right or pg.sprite.spritecollideany(self, board)):
-            self.rect = initialPosition
-            return False
-        return True
+        logging.debug("Current position: (%d,%d)", self.row, self.col)
+        if (self.col < BOARD_COLS - 1 - self.orient.value and not isColliding(self.row,self.col+1,self.orient)):
+            self.col += 1
+            logging.debug("New position: (%d,%d)", self.row, self.col)
+            return True
+        return False
 
     def apply_gravity(self, board):
-        initialPosition = copy.copy(self.rect)
-        self.rect.move_ip(0, MOVEINCREMENT)
-        logging.debug("Current position: %s", initialPosition)
-        logging.debug("Projected position: %s", self.rect)
-        if (self.rect.bottom > PLAYABLERECT.bottom or pg.sprite.spritecollideany(self, board)):
-            self.rect = initialPosition
+        logging.debug("Current position: (%d,%d)", self.row, self.col)
+        if (self.row < BOARD_ROWS - 2 + self.orient.value and not isColliding(self.row+1,self.col,self.orient)):
+            self.row += 1
+            logging.debug("New position: (%d,%d)", self.row, self.col)
+            return True
+        return False
+
+    def rotate(self, board):
+        logging.debug("Current position: (%d,%d)", self.row, self.col)
+        if (self.orient == Orientation.VERTICAL and self.col + 1 < BOARD_COLS and gameBoard[self.row][self.col+1] == 0):
+            self.image = pg.transform.rotate(self.image, 90)
+            self.orient = Orientation.HORIZONTAL
+        elif (self.orient == Orientation.HORIZONTAL and self.row + 1 < BOARD_ROWS and gameBoard[self.row+1][self.col] == 0):
+            self.image = pg.transform.rotate(self.image, 90)
+            self.orient = Orientation.VERTICAL
+        else:
             return False
         return True
 
-    def rotate(self, board):
-        logging.debug("Current position: %s", self.rect)
-        self.image = pg.transform.rotate(self.image, 90)
-        self.rect = self.image.get_rect(bottomleft=self.rect.bottomleft)
-        logging.debug("Projected position: %s", self.rect)
-        if (pg.sprite.spritecollideany(self, board)):
-            self.image = pg.transform.rotate(self.image, -90)
-            self.rect = self.image.get_rect(bottomleft=self.rect.bottomleft)
-            return False
-        return True
+
+    def settle(self):
+        return
 
 
 def main(winstyle=0):
@@ -238,17 +274,18 @@ def main(winstyle=0):
     clock = pg.time.Clock()
     ApplyGravity = pg.USEREVENT + 1 
     pg.time.set_timer(ApplyGravity, 1000)
+    pause = False
+    gameOver = False
 
     # spawn some viruses on the board
     numViruses = min(4 + (LEVEL * 4), 84)
     logging.info("Spawning %d viruses at level %d", numViruses, LEVEL)
     rowsToUse = min(6 + round(LEVEL / 3), 13) 
     logging.info("Using %d rows at level %d", rowsToUse, LEVEL)
+    virusEligibleRect = pg.Rect(BOARD_ROWS - rowsToUse,0,8,rowsToUse)   
+    [currentBoard.add(Virus(virusEligibleRect)) for x in range(0,numViruses)]
 
-    virusEligibleRect = copy.copy(PLAYABLERECT)
-    virusEligibleRect.top += (BOARD_ROWS - rowsToUse) * 16  
-    virusEligibleRect.height = rowsToUse * 16
-    [currentBoard.add(Virus(currentBoard, virusEligibleRect)) for x in range(0,numViruses)]
+#    print(gameBoard)
 
     # spawn our first pill
     currentPill = Pill(currentBoard)
@@ -279,15 +316,24 @@ def main(winstyle=0):
                         screen.blit(screen_backup, (0, 0))
                     pg.display.flip()
                     fullscreen = not fullscreen
-            if event.type == ApplyGravity:
+                if event.key == pg.K_p:
+                    pause = not pause
+            if event.type == ApplyGravity and pause == False:
                 pg.time.set_timer(ApplyGravity, GAMESPEED)
                 if (currentPill.apply_gravity(currentBoard) == False):
                     currentBoard.add(currentPill)
+                    currentPill.settle()
                     currentPill = Pill(currentBoard)
                     if pg.sprite.spritecollideany(currentPill, currentBoard):
                         print("GAME OVER")
+                        gameOver = True
                         break;
-                    
+               
+        if (pause):
+            continue
+        if (gameOver):
+            break
+
         # get keystrokes
         keystate = pg.key.get_pressed()
         if keystate[pg.K_LEFT]:
