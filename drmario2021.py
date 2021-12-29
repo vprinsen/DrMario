@@ -43,10 +43,11 @@ BOARD_COLS = 8
 PLAYABLERECT = pg.Rect(96 * SPRITERATIO, 80 * SPRITERATIO, BOARD_COLS * 16, BOARD_ROWS * 16) #pg.Rect(96 * SPRITERATIO, 80 * SPRITERATIO, 64 * SPRITERATIO, 128 * SPRITERATIO)
 START_ROW = 0
 START_COL = 4
+MATCH_COUNT = 4
 
 # temporary constants (should be configurable)
 GAMESPEED = 1000
-LEVEL = 20
+LEVEL = 0
 
 # generate the game board
 gameBoard = np.zeros((16,8))
@@ -64,18 +65,6 @@ def load_image(file):
         raise SystemExit('Could not load image "%s" %s' % (file, pg.get_error()))
     return surface.convert()
 
-def load_level(file):
-    file = os.path.join(main_dir, DATAFOLDER, file)
-    try:
-        levelData = np.genfromtxt(file, delimiter=",")
-        logging.info("Successfully loaded ", file)
-        logging.info(levelData)
-        logging.info(levelData.shape)
-        return levelData
-    except pg.error:
-        logging.warning("Warning, unable to load, %s" % file)
-    return None
-
 def load_image_from_spritesheet(spritesheet, rect):
     """loads an image from a specific rectangle"""
     image = pg.Surface(rect.size).convert()
@@ -83,6 +72,7 @@ def load_image_from_spritesheet(spritesheet, rect):
     return image
 
 def isColliding(row, col, orient):
+    """checks for pill collision at row,col""" 
     if gameBoard[row][col] != 0:
         return True
     if orient == Orientation.VERTICAL and gameBoard[row+1][col] != 0:
@@ -91,6 +81,16 @@ def isColliding(row, col, orient):
         return True
     return False
 
+def resolveGameBoard():
+    """check for horizontal/vertical color matches"""
+    for row in range(0,BOARD_ROWS-MATCH_COUNT+1):
+        for col in range(0,BOARD_COLS):
+            if gameBoard[row][col] != 0 and gameBoard[row][col] == gameBoard[row+1][col] and gameBoard[row][col] == gameBoard[row+2][col] and gameBoard[row][col] == gameBoard[row+3][col]:
+                logging.info("Vertical match starting at %d,%d", row, col) 
+    for row in range(0,BOARD_ROWS):
+        for col in range(0,BOARD_COLS-MATCH_COUNT+1):
+            if gameBoard[row][col] != 0 and gameBoard[row][col] == gameBoard[row][col+1] and gameBoard[row][col] == gameBoard[row][col+2] and gameBoard[row][col] == gameBoard[row][col+3]:
+                logging.info("Horizontal match starting at %d,%d", row, col) 
 
 # Classes
 class Virus(pg.sprite.Sprite):   
@@ -113,7 +113,7 @@ class Virus(pg.sprite.Sprite):
             row = random.randint(virusEligibleRect.x, virusEligibleRect.x + virusEligibleRect.height - 1) 
             col = random.randint(0,virusEligibleRect.width - 1)
             if gameBoard[row][col] == 0:
-                gameBoard[row][col] = self.color.value
+                gameBoard[row][col] = self.color.value + 1
                 break;
         
         self.rect = self.image.get_rect()
@@ -133,18 +133,19 @@ class Virus(pg.sprite.Sprite):
             logging.warning("Virus update returned an invalid colour")
 
 class Colour(Enum):
-    RED = 1
-    YELLOW = 2
-    BLUE = 3
+    RED = 0
+    YELLOW = 1
+    BLUE = 2
 
 class Orientation(Enum):
     VERTICAL = 0
     HORIZONTAL = 1
 
-
 class Pill(pg.sprite.Sprite):
     def __init__(self, board):
         pg.sprite.Sprite.__init__(self, self.containers)
+        self.color1 = random.choice(list(Colour))
+        self.color2 = random.choice(list(Colour))
         self.image = self.build_pill() 
         self.rect = self.image.get_rect()
         self.row = START_ROW
@@ -157,10 +158,9 @@ class Pill(pg.sprite.Sprite):
         
     def build_pill(self):
         pill = pg.Surface(PILLSIZE.size)
-        pill.blit(random.choice(self.images), (1,1))
-        pill.blit(pg.transform.flip(random.choice(self.images), flip_x=False, flip_y=True), (1,15))
+        pill.blit(self.images[self.color1.value], (1,1))
+        pill.blit(pg.transform.flip(self.images[self.color2.value], flip_x=False, flip_y=True), (1,15))
         return pill
-
 
     def move_left(self, board):
         logging.debug("Current position: (%d,%d)", self.row, self.col)
@@ -169,7 +169,7 @@ class Pill(pg.sprite.Sprite):
             logging.debug("New position: (%d,%d)", self.row, self.col)
             return True
         return False
-            
+    
     def move_right(self, board):
         logging.debug("Current position: (%d,%d)", self.row, self.col)
         if (self.col < BOARD_COLS - 1 - self.orient.value and not isColliding(self.row,self.col+1,self.orient)):
@@ -194,13 +194,24 @@ class Pill(pg.sprite.Sprite):
         elif (self.orient == Orientation.HORIZONTAL and self.row + 1 < BOARD_ROWS and gameBoard[self.row+1][self.col] == 0):
             self.image = pg.transform.rotate(self.image, 90)
             self.orient = Orientation.VERTICAL
+            """swap colours as we've now inverted the pill vertically"""
+            temp = self.color1
+            self.color1 = self.color2
+            self.color2 = temp
         else:
             return False
         return True
 
-
     def settle(self):
-        return
+        """called when the pill can't fall any further and must lock in place"""
+        gameBoard[self.row][self.col] = self.color1.value + 1
+        if self.orient == Orientation.VERTICAL:
+            gameBoard[self.row+1][self.col] = self.color2.value + 1
+        else:
+            gameBoard[self.row][self.col+1] = self.color2.value + 1
+        # TODO check for clear
+        resolveGameBoard()
+        return True
 
 
 def main(winstyle=0):
@@ -219,7 +230,6 @@ def main(winstyle=0):
     screen = pg.display.set_mode(SCREENRECT.size, winstyle, bestdepth)
 
     # Load images, assign to sprite classes
-    # (do this before the classes are used, after screen setup)
     gamesprites = load_image("NES - Dr Mario - Characters.png")
     pillImages = []
     for y_pos in (0, 8, 16):
@@ -270,7 +280,7 @@ def main(winstyle=0):
     Virus.containers = all
     Pill.containers = all
 
-    # Create Some Starting Values
+    # Initialize starting values
     clock = pg.time.Clock()
     ApplyGravity = pg.USEREVENT + 1 
     pg.time.set_timer(ApplyGravity, 1000)
@@ -324,7 +334,7 @@ def main(winstyle=0):
                     currentBoard.add(currentPill)
                     currentPill.settle()
                     currentPill = Pill(currentBoard)
-                    if pg.sprite.spritecollideany(currentPill, currentBoard):
+                    if isColliding(currentPill.row, currentPill.col, currentPill.orient):
                         print("GAME OVER")
                         gameOver = True
                         break;
@@ -332,6 +342,8 @@ def main(winstyle=0):
         if (pause):
             continue
         if (gameOver):
+            # TODO  game over handling
+            clock.tick(2000)
             break
 
         # get keystrokes
