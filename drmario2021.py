@@ -36,7 +36,7 @@ SCREENRECT = pg.Rect(0, 0, 512, 480)
 NESRECT = pg.Rect(0, 0, 256, 240)
 SPRITERATIO = 2
 MOVEINCREMENT = 16
-FRAME_RATE = 10
+FRAME_RATE = 30
 #PILLRECT = pg.Rect(0, 0, 8, 8)
 PILLSIZE = pg.Rect(0, 0, 16, 32) 
 HALFPILLSIZE = pg.Rect(0, 0, 16, 16)
@@ -414,6 +414,14 @@ def main(winstyle=0):
                     fullscreen = not fullscreen
                 if event.key == pg.K_p:
                     pause = not pause
+                if event.key == pg.K_LEFT:
+                   currentPill.moveLeft()
+                if event.key == pg.K_RIGHT:
+                    currentPill.moveRight()
+                if event.key == pg.K_DOWN:
+                    currentPill.applyGravity()
+                if event.key == pg.K_SPACE:
+                    currentPill.rotate()
             if event.type == ApplyGravity and pause == False:
                 pg.time.set_timer(ApplyGravity, GAMESPEED)
                 if (currentPill.applyGravity() == False):
@@ -432,17 +440,6 @@ def main(winstyle=0):
             # TODO  game over handling
             clock.tick(2000)
             break
-
-        # get keystrokes
-        keystate = pg.key.get_pressed()
-        if keystate[pg.K_LEFT]:
-            currentPill.moveLeft()
-        elif keystate[pg.K_RIGHT]:
-            currentPill.moveRight()
-        elif keystate[pg.K_DOWN]:
-            currentPill.applyGravity()
-        elif keystate[pg.K_SPACE]:
-            currentPill.rotate()
 
         # clear/erase the last drawn sprites
         all.clear(screen, background)
