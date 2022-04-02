@@ -38,6 +38,7 @@ SPRITERATIO = 2
 MOVEINCREMENT = 16
 #PILLRECT = pg.Rect(0, 0, 8, 8)
 PILLSIZE = pg.Rect(0, 0, 16, 32) 
+HALFPILLSIZE = pg.Rect(0, 0, 16, 16)
 BOARD_ROWS = 16
 BOARD_COLS = 8
 PLAYABLERECT = pg.Rect(96 * SPRITERATIO, 80 * SPRITERATIO, BOARD_COLS * 16, BOARD_ROWS * 16) #pg.Rect(96 * SPRITERATIO, 80 * SPRITERATIO, 64 * SPRITERATIO, 128 * SPRITERATIO)
@@ -71,13 +72,9 @@ def load_image_from_spritesheet(spritesheet, rect):
     image.blit(spritesheet, (0, 0), rect)
     return image
 
-def isColliding(row, col, orient):
+def isColliding(row, col):
     """checks for pill collision at row,col""" 
     if gameBoard[row][col] != 0:
-        return True
-    if orient == Orientation.VERTICAL and gameBoard[row+1][col] != 0:
-        return True
-    if orient == Orientation.HORIZONTAL and gameBoard[row][col+1] != 0:
         return True
     return False
 
@@ -141,53 +138,86 @@ class Orientation(Enum):
     VERTICAL = 0
     HORIZONTAL = 1
 
-class Pill(pg.sprite.Sprite):
-    def __init__(self, board):
+class Pill():
+    """a pill is composed of two halves"""
+    def __init__(self):
+        self.one = HalfPill()
+        self.two = HalfPill(self.one)
+        self.one.setPartner(self.two)
+        self.orientation = Orientation.VERTICAL
+    def move_left(self):
+        """check for collision on the left and move the pill halves"""
+        if (self.orientation == Orientation.VERTICAL):
+            if (self.one.col > 0 and not isColliding(self.one.row,self.one.col-1) and not isColliding(self.two.row,self.two.col-1)):
+                self.one.move_left()
+                self.two.move_left()
+                return True
+            return False
+        elif (self.orientation == Orientation.HORIZONTAL):
+            print("TODO")
+    def move_right(self):
+        """check for collision on the right and move the pill halves"""
+        if (self.orientation == Orientation.VERTICAL):
+            if (self.one.col < BOARD_COLS - 1 and not isColliding(self.one.row,self.one.col+1) and not isColliding(self.two.row,self.two.col+1)):
+                self.one.move_right()
+                self.two.move_right()
+                return True
+            return False
+        elif (self.orientation == Orientation.HORIZONTAL):
+            print("TODO")
+    def apply_gravity(self):
+        """check for collision below and move the pill halves"""
+        if (self.orientation == Orientation.VERTICAL):
+            if (self.one.row < BOARD_ROWS - 1 and self.two.row < BOARD_ROWS - 1 and not isColliding(self.one.row+1,self.one.col) and not isColliding(self.two.row+1,self.two.col)):
+                self.one.apply_gravity()
+                self.two.apply_gravity()
+                return True
+            return False
+        elif (self.orientation == Orientation.HORIZONTAL):
+            print("TODO")
+    def settle(self, currentBoard, settledPills):
+        """pill has hit collision, add it to the board and the list of dropped pills"""
+        currentBoard.add(self.one)
+        currentBoard.add(self.two)
+        self.one.settle()
+        self.two.settle()
+        settledPills.add(self.one)
+        settledPills.add(self.two)
+    def rotate(self):
+        """rotate the pill 90 degrees"""
+        print("Rotate")
+    def isColliding(self):
+        """check if the pill is colliding with anything in its current position"""
+        return isColliding(self.one.row, self.one.col) or isColliding(self.two.row, self.two.col)
+
+class HalfPill(pg.sprite.Sprite):
+    def __init__(self, partner = None):
         pg.sprite.Sprite.__init__(self, self.containers)
-        self.color1 = random.choice(list(Colour))
-        self.color2 = random.choice(list(Colour))
+        self.partner = partner
+        self.orient = Orientation.VERTICAL
+        self.color = random.choice(list(Colour))
         self.image = self.build_pill() 
         self.rect = self.image.get_rect()
-        self.row = START_ROW
+        self.row = START_ROW if (self.partner == None) else START_ROW + 1 
         self.col = START_COL
-        self.orient = Orientation.VERTICAL
-
+    def setPartner(self, partnerHalf):
+        self.partner = partnerHalf
     def update(self):
+        self.image = self.build_pill()
         self.rect.top = (self.row * 16) + PLAYABLERECT.y 
         self.rect.left = (self.col * 16) + PLAYABLERECT.x
-        
     def build_pill(self):
-        pill = pg.Surface(PILLSIZE.size)
-        pill.blit(self.images[self.color1.value], (1,1))
-        pill.blit(pg.transform.flip(self.images[self.color2.value], flip_x=False, flip_y=True), (1,15))
-        return pill
-
-    def move_left(self, board):
-        logging.debug("Current position: (%d,%d)", self.row, self.col)
-        if (self.col > 0 and not isColliding(self.row,self.col-1,self.orient)):
-            self.col -= 1
-            logging.debug("New position: (%d,%d)", self.row, self.col)
-            return True
-        return False
-    
-    def move_right(self, board):
-        logging.debug("Current position: (%d,%d)", self.row, self.col)
-        if (self.col < BOARD_COLS - 1 - self.orient.value and not isColliding(self.row,self.col+1,self.orient)):
-            self.col += 1
-            logging.debug("New position: (%d,%d)", self.row, self.col)
-            return True
-        return False
-
-    def apply_gravity(self, board):
-        logging.debug("Current position: (%d,%d)", self.row, self.col)
-        if (self.row < BOARD_ROWS - 2 + self.orient.value and not isColliding(self.row+1,self.col,self.orient)):
-            self.row += 1
-            logging.debug("New position: (%d,%d)", self.row, self.col)
-            return True
-        return False
-
-    def rotate(self, board):
-        logging.debug("Current position: (%d,%d)", self.row, self.col)
+        halfPillImage = pg.Surface(HALFPILLSIZE.size)
+        halfPillImage.blit(self.images[self.color.value], (1,1))
+        halfPillImage.blit(pg.transform.flip(self.images[self.color.value], flip_x=False, flip_y=True), (1,15))
+        return halfPillImage
+    def move_left(self):
+        self.col -= 1
+    def move_right(self):
+        self.col += 1
+    def apply_gravity(self):
+        self.row += 1
+    def rotate(self):
         if (self.orient == Orientation.VERTICAL and self.col + 1 < BOARD_COLS and gameBoard[self.row][self.col+1] == 0):
             self.image = pg.transform.rotate(self.image, 90)
             self.orient = Orientation.HORIZONTAL
@@ -201,17 +231,14 @@ class Pill(pg.sprite.Sprite):
         else:
             return False
         return True
-
     def settle(self):
         """called when the pill can't fall any further and must lock in place"""
-        gameBoard[self.row][self.col] = self.color1.value + 1
-        if self.orient == Orientation.VERTICAL:
-            gameBoard[self.row+1][self.col] = self.color2.value + 1
-        else:
-            gameBoard[self.row][self.col+1] = self.color2.value + 1
-        # TODO check for clear
+        gameBoard[self.row][self.col] = self.color.value + 1
+        # check for matches
         resolveGameBoard()
         return True
+    def print_position(self):
+        logging.debug("Position: (%d,%d)", self.row, self.col)
 
 
 def main(winstyle=0):
@@ -231,11 +258,14 @@ def main(winstyle=0):
 
     # Load images, assign to sprite classes
     gamesprites = load_image("NES - Dr Mario - Characters.png")
+
+    # Pill images
     pillImages = []
     for y_pos in (0, 8, 16):
-        pillImages.append(load_image_from_spritesheet(gamesprites, pg.Rect(y_pos, 8, 7, 7)))
-    Pill.images = [pg.transform.scale(pillImage, (14, 14)) for pillImage in pillImages]
+        pillImages.append(load_image_from_spritesheet(gamesprites, pg.Rect(y_pos, 40, 7, 7)))
+    HalfPill.images = [pg.transform.scale(pillImage, (14, 14)) for pillImage in pillImages]
 
+    # Virus images
     redVirusImages = []
     for x_pos in (88, 96):
         redVirusImages.append(load_image_from_spritesheet(gamesprites, pg.Rect(0, x_pos, 7, 7)))
@@ -273,12 +303,13 @@ def main(winstyle=0):
     pg.display.flip()
 
     # Initialize Game Groups
+    settledPills = pg.sprite.Group()
     currentBoard = pg.sprite.Group()
     all = pg.sprite.RenderUpdates()
 
     # assign default groups to each sprite class
     Virus.containers = all
-    Pill.containers = all
+    HalfPill.containers = all
 
     # Initialize starting values
     clock = pg.time.Clock()
@@ -298,7 +329,7 @@ def main(winstyle=0):
 #    print(gameBoard)
 
     # spawn our first pill
-    currentPill = Pill(currentBoard)
+    currentPill = Pill()
 
     # start game loop
     while (1):
@@ -330,11 +361,12 @@ def main(winstyle=0):
                     pause = not pause
             if event.type == ApplyGravity and pause == False:
                 pg.time.set_timer(ApplyGravity, GAMESPEED)
-                if (currentPill.apply_gravity(currentBoard) == False):
-                    currentBoard.add(currentPill)
-                    currentPill.settle()
+                if (currentPill.apply_gravity() == False):
+                    # add the current pill to the fixed board and spawn a new pill
+                    currentPill.settle(currentBoard, settledPills)
                     currentPill = Pill(currentBoard)
-                    if isColliding(currentPill.row, currentPill.col, currentPill.orient):
+                    # if our newly-spawned pill is colliding, the board is full and we lost
+                    if currentPill.isColliding():
                         print("GAME OVER")
                         gameOver = True
                         break;
@@ -349,13 +381,13 @@ def main(winstyle=0):
         # get keystrokes
         keystate = pg.key.get_pressed()
         if keystate[pg.K_LEFT]:
-            currentPill.move_left(currentBoard)
+            currentPill.move_left()
         elif keystate[pg.K_RIGHT]:
-            currentPill.move_right(currentBoard)
+            currentPill.move_right()
         elif keystate[pg.K_DOWN]:
-            currentPill.apply_gravity(currentBoard)
+            currentPill.apply_gravity()
         elif keystate[pg.K_SPACE]:
-            currentPill.rotate(currentBoard)
+            currentPill.rotate()
 
         # clear/erase the last drawn sprites
         all.clear(screen, background)
