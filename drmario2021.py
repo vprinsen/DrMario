@@ -36,6 +36,7 @@ SCREENRECT = pg.Rect(0, 0, 512, 480)
 NESRECT = pg.Rect(0, 0, 256, 240)
 SPRITERATIO = 2
 MOVEINCREMENT = 16
+FRAME_RATE = 10
 #PILLRECT = pg.Rect(0, 0, 8, 8)
 PILLSIZE = pg.Rect(0, 0, 16, 32) 
 HALFPILLSIZE = pg.Rect(0, 0, 16, 16)
@@ -54,6 +55,17 @@ LEVEL = 0
 gameBoard = np.zeros((16,8))
 
 main_dir = os.path.split(os.path.abspath(__file__))[0]
+
+# Enums
+
+class Colour(Enum):
+    RED = 0
+    YELLOW = 1
+    BLUE = 2
+
+class Orientation(Enum):
+    VERTICAL = 0
+    HORIZONTAL = 1
 
 # Shared functions
 
@@ -90,6 +102,7 @@ def resolveGameBoard():
                 logging.info("Horizontal match starting at %d,%d", row, col) 
 
 # Classes
+
 class Virus(pg.sprite.Sprite):   
     def __init__(self, virusEligibleRect):
         pg.sprite.Sprite.__init__(self, self.containers)
@@ -129,52 +142,76 @@ class Virus(pg.sprite.Sprite):
         else:
             logging.warning("Virus update returned an invalid colour")
 
-class Colour(Enum):
-    RED = 0
-    YELLOW = 1
-    BLUE = 2
-
-class Orientation(Enum):
-    VERTICAL = 0
-    HORIZONTAL = 1
-
 class Pill():
     """a pill is composed of two halves"""
     def __init__(self):
-        self.one = HalfPill()
-        self.two = HalfPill(self.one)
+        self.orient = Orientation.HORIZONTAL
+        self.one = HalfPill(self.orient)
+        self.two = HalfPill(self.orient, self.one)
         self.one.setPartner(self.two)
-        self.orientation = Orientation.VERTICAL
-    def move_left(self):
+    def moveLeft(self):
         """check for collision on the left and move the pill halves"""
-        if (self.orientation == Orientation.VERTICAL):
+        if (self.orient == Orientation.VERTICAL):
             if (self.one.col > 0 and not isColliding(self.one.row,self.one.col-1) and not isColliding(self.two.row,self.two.col-1)):
-                self.one.move_left()
-                self.two.move_left()
+                self.one.moveLeft()
+                self.two.moveLeft()
                 return True
             return False
-        elif (self.orientation == Orientation.HORIZONTAL):
-            print("TODO")
-    def move_right(self):
+        elif (self.orient == Orientation.HORIZONTAL):
+            leftHalf = self.getLeftHalf()
+            if (leftHalf != None and leftHalf.col > 0 and not isColliding(leftHalf.row,leftHalf.col-1)):
+                self.one.moveLeft()
+                self.two.moveLeft()
+                return True
+            return False
+    def getLeftHalf(self):
+        if self.orient == Orientation.VERTICAL:
+            logging.warning("Called getRightHalf but pill is in vertical orientation!")
+            return None
+        return self.one if (self.one.col < self.two.col) else self.two
+    def moveRight(self):
         """check for collision on the right and move the pill halves"""
-        if (self.orientation == Orientation.VERTICAL):
+        if (self.orient == Orientation.VERTICAL):
             if (self.one.col < BOARD_COLS - 1 and not isColliding(self.one.row,self.one.col+1) and not isColliding(self.two.row,self.two.col+1)):
-                self.one.move_right()
-                self.two.move_right()
+                self.one.moveRight()
+                self.two.moveRight()
+                return True
+                self.one.moveRight()
+                self.two.moveRight()
                 return True
             return False
-        elif (self.orientation == Orientation.HORIZONTAL):
-            print("TODO")
-    def apply_gravity(self):
+        elif (self.orient == Orientation.HORIZONTAL):
+            rightHalf = self.getRightHalf()
+            if (rightHalf != None and rightHalf.col < BOARD_COLS - 1 and not isColliding(rightHalf.row,rightHalf.col+1)):
+                self.one.moveRight()
+                self.two.moveRight()
+                return True
+            return False
+    def getRightHalf(self):
+        if (self.orient == Orientation.VERTICAL):
+            logging.warning("Called getRightHalf but pill is in vertical orientation!")
+            return None
+        return self.one if (self.one.col > self.two.col) else self.two
+    def applyGravity(self):
         """check for collision below and move the pill halves"""
-        if (self.orientation == Orientation.VERTICAL):
-            if (self.one.row < BOARD_ROWS - 1 and self.two.row < BOARD_ROWS - 1 and not isColliding(self.one.row+1,self.one.col) and not isColliding(self.two.row+1,self.two.col)):
-                self.one.apply_gravity()
-                self.two.apply_gravity()
+        if (self.orient == Orientation.VERTICAL):
+            bottomHalf = self.getBottomHalf()
+            if (bottomHalf and bottomHalf.row < BOARD_ROWS - 1 and not isColliding(bottomHalf.row+1,bottomHalf.col)):
+                self.one.applyGravity()
+                self.two.applyGravity()
                 return True
             return False
-        elif (self.orientation == Orientation.HORIZONTAL):
-            print("TODO")
+        elif (self.orient == Orientation.HORIZONTAL):
+            if (self.one.row < BOARD_ROWS - 1 and not isColliding(self.one.row+1,self.one.col) and not isColliding(self.two.row+1,self.two.col)):
+                self.one.applyGravity()
+                self.two.applyGravity()
+                return True
+            return False
+    def getBottomHalf(self):
+        if (self.orient == Orientation.HORIZONTAL):
+            logging.warning("Called getBottomHalf but pill is in horizontal orientation!")
+            return None
+        return self.one if (self.one.row > self.two.row) else self.two
     def settle(self, currentBoard, settledPills):
         """pill has hit collision, add it to the board and the list of dropped pills"""
         currentBoard.add(self.one)
@@ -191,31 +228,31 @@ class Pill():
         return isColliding(self.one.row, self.one.col) or isColliding(self.two.row, self.two.col)
 
 class HalfPill(pg.sprite.Sprite):
-    def __init__(self, partner = None):
+    def __init__(self, pillOrientation, partner = None):
         pg.sprite.Sprite.__init__(self, self.containers)
         self.partner = partner
-        self.orient = Orientation.VERTICAL
+        self.orient = pillOrientation
         self.color = random.choice(list(Colour))
-        self.image = self.build_pill() 
+        self.image = self.buildPill() 
         self.rect = self.image.get_rect()
-        self.row = START_ROW if (self.partner == None) else START_ROW + 1 
-        self.col = START_COL
+        self.row = START_ROW if (self.orient == Orientation.VERTICAL and self.partner == None) else START_ROW + 1 
+        self.col = START_COL if (self.orient == Orientation.HORIZONTAL and self.partner == None) else START_COL + 1 
     def setPartner(self, partnerHalf):
         self.partner = partnerHalf
     def update(self):
-        self.image = self.build_pill()
+        self.image = self.buildPill()
         self.rect.top = (self.row * 16) + PLAYABLERECT.y 
         self.rect.left = (self.col * 16) + PLAYABLERECT.x
-    def build_pill(self):
+    def buildPill(self):
         halfPillImage = pg.Surface(HALFPILLSIZE.size)
         halfPillImage.blit(self.images[self.color.value], (1,1))
         halfPillImage.blit(pg.transform.flip(self.images[self.color.value], flip_x=False, flip_y=True), (1,15))
         return halfPillImage
-    def move_left(self):
+    def moveLeft(self):
         self.col -= 1
-    def move_right(self):
+    def moveRight(self):
         self.col += 1
-    def apply_gravity(self):
+    def applyGravity(self):
         self.row += 1
     def rotate(self):
         if (self.orient == Orientation.VERTICAL and self.col + 1 < BOARD_COLS and gameBoard[self.row][self.col+1] == 0):
@@ -361,10 +398,10 @@ def main(winstyle=0):
                     pause = not pause
             if event.type == ApplyGravity and pause == False:
                 pg.time.set_timer(ApplyGravity, GAMESPEED)
-                if (currentPill.apply_gravity() == False):
+                if (currentPill.applyGravity() == False):
                     # add the current pill to the fixed board and spawn a new pill
                     currentPill.settle(currentBoard, settledPills)
-                    currentPill = Pill(currentBoard)
+                    currentPill = Pill()
                     # if our newly-spawned pill is colliding, the board is full and we lost
                     if currentPill.isColliding():
                         print("GAME OVER")
@@ -381,11 +418,11 @@ def main(winstyle=0):
         # get keystrokes
         keystate = pg.key.get_pressed()
         if keystate[pg.K_LEFT]:
-            currentPill.move_left()
+            currentPill.moveLeft()
         elif keystate[pg.K_RIGHT]:
-            currentPill.move_right()
+            currentPill.moveRight()
         elif keystate[pg.K_DOWN]:
-            currentPill.apply_gravity()
+            currentPill.applyGravity()
         elif keystate[pg.K_SPACE]:
             currentPill.rotate()
 
@@ -399,8 +436,8 @@ def main(winstyle=0):
         dirty = all.draw(screen)
         pg.display.update(dirty)
 
-        # cap the framerate at 30fps
-        clock.tick(10)
+        # cap the framerate 
+        clock.tick(FRAME_RATE)
 
 
 # call the "main" function if running this script
