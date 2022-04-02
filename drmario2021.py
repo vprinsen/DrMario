@@ -207,13 +207,18 @@ class Pill():
                 self.two.applyGravity()
                 return True
             return False
+    def getTopHalf(self):
+        if (self.orient == Orientation.HORIZONTAL):
+            logging.warning("Called getTopHalf but pill is in horizontal orientation!")
+            return None
+        return self.one if (self.one.row < self.two.row) else self.two 
     def getBottomHalf(self):
         if (self.orient == Orientation.HORIZONTAL):
             logging.warning("Called getBottomHalf but pill is in horizontal orientation!")
             return None
         return self.one if (self.one.row > self.two.row) else self.two
     def settle(self, currentBoard, settledPills):
-        """pill has hit collision, add it to the board and the list of dropped pills"""
+        """called when the pill can't fall any further and must lock in place"""
         currentBoard.add(self.one)
         currentBoard.add(self.two)
         self.one.settle()
@@ -222,7 +227,29 @@ class Pill():
         settledPills.add(self.two)
     def rotate(self):
         """rotate the pill 90 degrees"""
-        print("Rotate")
+        if (self.orient == Orientation.HORIZONTAL):
+            """right-hand side always rotates up"""
+            rightHalf = self.getRightHalf()
+            if not isColliding(rightHalf.row-1, rightHalf.col-1):
+                rightHalf.setPosition(rightHalf.row-1,rightHalf.col-1)
+                print(rightHalf.row, rightHalf.col)
+                self.one.flipOrientation()
+                self.two.flipOrientation()
+                self.orient = Orientation.VERTICAL
+                return True
+            return False
+        else:
+            """rotate into the bottom half's row"""
+            topHalf = self.getTopHalf()
+            bottomHalf = self.getBottomHalf()
+            if not isColliding(bottomHalf.row,bottomHalf.col+1):
+                topHalf.setPosition(bottomHalf.row, bottomHalf.col)
+                bottomHalf.setPosition(bottomHalf.row, bottomHalf.col+1)
+                self.one.flipOrientation()
+                self.two.flipOrientation()
+                self.orient = Orientation.HORIZONTAL
+                return True
+            return False
     def isColliding(self):
         """check if the pill is colliding with anything in its current position"""
         return isColliding(self.one.row, self.one.col) or isColliding(self.two.row, self.two.col)
@@ -235,10 +262,15 @@ class HalfPill(pg.sprite.Sprite):
         self.color = random.choice(list(Colour))
         self.image = self.buildPill() 
         self.rect = self.image.get_rect()
-        self.row = START_ROW if (self.orient == Orientation.VERTICAL and self.partner == None) else START_ROW + 1 
-        self.col = START_COL if (self.orient == Orientation.HORIZONTAL and self.partner == None) else START_COL + 1 
+        self.row = START_ROW if (self.partner == None or self.orient == Orientation.HORIZONTAL) else START_ROW + 1
+        self.col = START_COL if (self.partner == None or self.orient == Orientation.VERTICAL) else START_COL - 1
     def setPartner(self, partnerHalf):
         self.partner = partnerHalf
+    def setPosition(self, row, col):
+        self.row = row
+        self.col = col
+    def flipOrientation(self):
+        self.orient = Orientation.VERTICAL if (self.orient == Orientation.HORIZONTAL) else Orientation.HORIZONTAL
     def update(self):
         self.image = self.buildPill()
         self.rect.top = (self.row * 16) + PLAYABLERECT.y 
@@ -254,20 +286,6 @@ class HalfPill(pg.sprite.Sprite):
         self.col += 1
     def applyGravity(self):
         self.row += 1
-    def rotate(self):
-        if (self.orient == Orientation.VERTICAL and self.col + 1 < BOARD_COLS and gameBoard[self.row][self.col+1] == 0):
-            self.image = pg.transform.rotate(self.image, 90)
-            self.orient = Orientation.HORIZONTAL
-        elif (self.orient == Orientation.HORIZONTAL and self.row + 1 < BOARD_ROWS and gameBoard[self.row+1][self.col] == 0):
-            self.image = pg.transform.rotate(self.image, 90)
-            self.orient = Orientation.VERTICAL
-            """swap colours as we've now inverted the pill vertically"""
-            temp = self.color1
-            self.color1 = self.color2
-            self.color2 = temp
-        else:
-            return False
-        return True
     def settle(self):
         """called when the pill can't fall any further and must lock in place"""
         gameBoard[self.row][self.col] = self.color.value + 1
