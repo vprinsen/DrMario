@@ -47,6 +47,10 @@ START_ROW = 0
 START_COL = 4
 MATCH_COUNT = 4
 
+# animation timers
+VIRUS_ANIM_TIMER = 100
+
+
 # temporary constants (should be configurable)
 GAMESPEED = 1000
 LEVEL = 0
@@ -108,6 +112,7 @@ class Virus(pg.sprite.Sprite):
         pg.sprite.Sprite.__init__(self, self.containers)
         self.frame = 1
         self.animcycle = 2
+        self.animTimer = 0
         self.color = random.choice(list(Colour))
         if (self.color == Colour.RED):
             self.image = self.redVirusImages[self.frame // self.animcycle % 2]
@@ -130,17 +135,21 @@ class Virus(pg.sprite.Sprite):
         self.rect.top = PLAYABLERECT.y + (row * 16)
         self.rect.left = PLAYABLERECT.x + (col * 16)
 
-    def update(self):
-        self.frame += 1
-        self.animcycle = 2
-        if (self.color == Colour.RED):
-            self.image = self.redVirusImages[self.frame // self.animcycle % 2]
-        elif (self.color == Colour.YELLOW):
-            self.image = self.yellowVirusImages[self.frame // self.animcycle % 2]
-        elif (self.color == Colour.BLUE):
-            self.image = self.blueVirusImages[self.frame // self.animcycle % 2]
-        else:
-            logging.warning("Virus update returned an invalid colour")
+    def update(self, timeDelta):
+        # animate virus sprites
+        self.animTimer += timeDelta
+        if (self.animTimer > VIRUS_ANIM_TIMER):
+            self.animTimer = 0
+            self.frame += 1
+            self.animcycle = 2
+            if (self.color == Colour.RED):
+                self.image = self.redVirusImages[self.frame // self.animcycle % 2]
+            elif (self.color == Colour.YELLOW):
+                self.image = self.yellowVirusImages[self.frame // self.animcycle % 2]
+            elif (self.color == Colour.BLUE):
+                self.image = self.blueVirusImages[self.frame // self.animcycle % 2]
+            else:
+                logging.warning("Virus update returned an invalid colour")
 
 class Pill():
     """a pill is composed of two halves"""
@@ -271,7 +280,7 @@ class HalfPill(pg.sprite.Sprite):
         self.col = col
     def flipOrientation(self):
         self.orient = Orientation.VERTICAL if (self.orient == Orientation.HORIZONTAL) else Orientation.HORIZONTAL
-    def update(self):
+    def update(self, timeDelta):
         self.image = self.buildPill()
         self.rect.top = (self.row * 16) + PLAYABLERECT.y 
         self.rect.left = (self.col * 16) + PLAYABLERECT.x
@@ -445,7 +454,7 @@ def main(winstyle=0):
         all.clear(screen, background)
 
         # update all the sprites
-        all.update()
+        all.update(clock.get_time())
 
         # draw the scene
         dirty = all.draw(screen)
