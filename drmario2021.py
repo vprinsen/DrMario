@@ -121,7 +121,7 @@ class Virus(pg.sprite.Sprite):
         elif (self.color == Colour.BLUE):
             self.image = self.blueVirusImages[self.frame // self.animcycle % 2]
         else:
-            logging.warning("Virus init returned an invalid colour")
+            logging.error("Virus init returned an invalid colour")
 
         # spawn virus on the board
         while (1):
@@ -149,7 +149,7 @@ class Virus(pg.sprite.Sprite):
             elif (self.color == Colour.BLUE):
                 self.image = self.blueVirusImages[self.frame // self.animcycle % 2]
             else:
-                logging.warning("Virus update returned an invalid colour")
+                logging.error("Virus update returned an invalid colour")
 
 class Pill():
     """a pill is composed of two halves"""
@@ -175,7 +175,7 @@ class Pill():
             return False
     def getLeftHalf(self):
         if self.orient == Orientation.VERTICAL:
-            logging.warning("Called getRightHalf but pill is in vertical orientation!")
+            logging.error("Called getRightHalf but pill is in vertical orientation!")
             return None
         return self.one if (self.one.col < self.two.col) else self.two
     def moveRight(self):
@@ -198,7 +198,7 @@ class Pill():
             return False
     def getRightHalf(self):
         if (self.orient == Orientation.VERTICAL):
-            logging.warning("Called getRightHalf but pill is in vertical orientation!")
+            logging.error("Called getRightHalf but pill is in vertical orientation!")
             return None
         return self.one if (self.one.col > self.two.col) else self.two
     def applyGravity(self):
@@ -218,12 +218,12 @@ class Pill():
             return False
     def getTopHalf(self):
         if (self.orient == Orientation.HORIZONTAL):
-            logging.warning("Called getTopHalf but pill is in horizontal orientation!")
+            logging.error("Called getTopHalf but pill is in horizontal orientation!")
             return None
         return self.one if (self.one.row < self.two.row) else self.two 
     def getBottomHalf(self):
         if (self.orient == Orientation.HORIZONTAL):
-            logging.warning("Called getBottomHalf but pill is in horizontal orientation!")
+            logging.error("Called getBottomHalf but pill is in horizontal orientation!")
             return None
         return self.one if (self.one.row > self.two.row) else self.two
     def settle(self, currentBoard, settledPills):
@@ -273,6 +273,10 @@ class HalfPill(pg.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.row = START_ROW if (self.partner == None or self.orient == Orientation.HORIZONTAL) else START_ROW + 1
         self.col = START_COL if (self.partner == None or self.orient == Orientation.VERTICAL) else START_COL - 1
+        self.settled = False
+    def splitFromPartner(self):
+        self.partner = None 
+        self.settled = False
     def setPartner(self, partnerHalf):
         self.partner = partnerHalf
     def setPosition(self, row, col):
@@ -294,10 +298,16 @@ class HalfPill(pg.sprite.Sprite):
     def moveRight(self):
         self.col += 1
     def applyGravity(self):
-        self.row += 1
+        if (self.partner is not None):
+            self.row += 1
+        if (self.partner == None and self.row < BOARD_ROWS - 1 and not isColliding(self.row+1,self.col)):
+            gameBoard[self.row][self.col] = 0
+            self.row += 1
+            gameBoard[self.row][self.col] = self.color.value + 1
     def settle(self):
         """called when the pill can't fall any further and must lock in place"""
         gameBoard[self.row][self.col] = self.color.value + 1
+        self.settled = True
         # check for matches
         resolveGameBoard()
         return True
@@ -427,8 +437,8 @@ def main(winstyle=0):
                    currentPill.moveLeft()
                 if event.key == pg.K_RIGHT:
                     currentPill.moveRight()
-                if event.key == pg.K_DOWN:
-                    currentPill.applyGravity()
+                # if event.key == pg.K_DOWN:
+                #     currentPill.applyGravity()
                 if event.key == pg.K_SPACE:
                     currentPill.rotate()
             if event.type == ApplyGravity and pause == False:
@@ -442,6 +452,10 @@ def main(winstyle=0):
                         print("GAME OVER")
                         gameOver = True
                         break;
+                for pill in settledPills:
+                    pill.splitFromPartner()
+                    if (pill.partner == None):
+                        pill.applyGravity()
                
         if (pause):
             continue
@@ -449,6 +463,11 @@ def main(winstyle=0):
             # TODO  game over handling
             clock.tick(2000)
             break
+
+        # get continuous keystrokes
+        keystate = pg.key.get_pressed()
+        if keystate[pg.K_DOWN]:
+            currentPill.applyGravity()
 
         # clear/erase the last drawn sprites
         all.clear(screen, background)
