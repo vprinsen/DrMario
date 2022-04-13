@@ -1,4 +1,4 @@
-# Dr Mario 2021
+# Dr Mario
  
 This is a simple game project to explore the Pygame framework.
 
