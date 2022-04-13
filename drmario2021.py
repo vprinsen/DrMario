@@ -46,9 +46,9 @@ START_ROW = 0
 START_COL = 4
 MATCH_COUNT = 4
 
-# animation timers
+# timers
 VIRUS_ANIM_TIMER = 100
-
+PILL_GRAVITY_TIMER = 1000
 
 # temporary constants (should be configurable)
 GAMESPEED = 1000
@@ -176,6 +176,7 @@ class Pill():
         self.one = HalfPill(self.orient)
         self.two = HalfPill(self.orient, self.one)
         self.one.setPartner(self.two)
+        self.gravityTimer = 0
     def moveLeft(self):
         """check for collision on the left and move the pill halves"""
         if (self.orient == Orientation.VERTICAL):
@@ -219,21 +220,26 @@ class Pill():
             logging.error("Called getRightHalf but pill is in vertical orientation!")
             return None
         return self.one if (self.one.col > self.two.col) else self.two
-    def applyGravity(self):
-        """check for collision below and move the pill halves"""
-        if (self.orient == Orientation.VERTICAL):
-            bottomHalf = self.getBottomHalf()
-            if (bottomHalf and bottomHalf.row < BOARD_ROWS - 1 and not isColliding(bottomHalf.row+1,bottomHalf.col)):
-                self.one.applyGravity()
-                self.two.applyGravity()
-                return True
-            return False
-        elif (self.orient == Orientation.HORIZONTAL):
-            if (self.one.row < BOARD_ROWS - 1 and not isColliding(self.one.row+1,self.one.col) and not isColliding(self.two.row+1,self.two.col)):
-                self.one.applyGravity()
-                self.two.applyGravity()
-                return True
-            return False
+    def moveDown(self):
+        self.applyGravity(0,True)
+    def applyGravity(self, timeDelta, userInput = False):
+        self.gravityTimer += timeDelta
+        if (self.gravityTimer > PILL_GRAVITY_TIMER or userInput):
+            self.gravityTimer = 0
+            """check for collision below and move the pill halves"""
+            if (self.orient == Orientation.VERTICAL):
+                bottomHalf = self.getBottomHalf()
+                if (bottomHalf and bottomHalf.row < BOARD_ROWS - 1 and not isColliding(bottomHalf.row+1,bottomHalf.col)):
+                    self.one.applyGravity()
+                    self.two.applyGravity()
+                    return True
+                return False
+            elif (self.orient == Orientation.HORIZONTAL):
+                if (self.one.row < BOARD_ROWS - 1 and not isColliding(self.one.row+1,self.one.col) and not isColliding(self.two.row+1,self.two.col)):
+                    self.one.applyGravity()
+                    self.two.applyGravity()
+                    return True
+                return False
     def getTopHalf(self):
         if (self.orient == Orientation.HORIZONTAL):
             logging.error("Called getTopHalf but pill is in horizontal orientation!")
@@ -400,8 +406,6 @@ def main(winstyle=0):
 
     # Initialize starting values
     clock = pg.time.Clock()
-    ApplyGravity = pg.USEREVENT + 1 
-    pg.time.set_timer(ApplyGravity, 1000)
     pause = False
     gameOver = False
 
@@ -420,6 +424,9 @@ def main(winstyle=0):
 
     # start game loop
     while (1):
+        # get time delta since last tick
+        dt = clock.get_time()
+
         # get input
         for event in pg.event.get():
             if event.type == pg.QUIT:
@@ -454,31 +461,31 @@ def main(winstyle=0):
                 #     currentPill.applyGravity()
                 if event.key == pg.K_SPACE:
                     currentPill.rotate()
-            if event.type == ApplyGravity and pause == False:
-                pg.time.set_timer(ApplyGravity, GAMESPEED)
-                if (currentPill.applyGravity() == False):
-                    # add the current pill to the fixed board and spawn a new pill
-                    currentPill.settle(currentBoard, settledPills)
-                    # check for matches
-                    matchedPillLocations = resolveGameBoard()
-                    # clear matches
-                    for pill in settledPills:
-                        if (pill.row,pill.col) in matchedPillLocations:
-                            pill.splitFromPartner()
-                            settledPills.remove(pill)
-                            currentBoard.remove(pill)
-                            pill.kill()
-                            gameBoard[pill.row][pill.col] = None
-                            matchedPillLocations.remove((pill.row,pill.col))
-                    # if (pill.partner == None):
-                        # pill.applyGravity()
-                    # generate a new pill
-                    currentPill = Pill()
-                    # if our newly-spawned pill is colliding, the board is full and we lost
-                    if currentPill.isColliding():
-                        print("GAME OVER")
-                        gameOver = True
-                        break;
+
+        # apply gravity
+        if (currentPill.applyGravity(dt) == False):
+            # add the current pill to the fixed board and spawn a new pill
+            currentPill.settle(currentBoard, settledPills)
+            # check for matches
+            matchedPillLocations = resolveGameBoard()
+            # clear matches
+            for pill in settledPills:
+                if (pill.row,pill.col) in matchedPillLocations:
+                    pill.splitFromPartner()
+                    settledPills.remove(pill)
+                    currentBoard.remove(pill)
+                    pill.kill()
+                    gameBoard[pill.row][pill.col] = None
+                    matchedPillLocations.remove((pill.row,pill.col))
+            # if (pill.partner == None):
+                # pill.applyGravity()
+            # generate a new pill
+            currentPill = Pill()
+            # if our newly-spawned pill is colliding, the board is full and we lost
+            if currentPill.isColliding():
+                print("GAME OVER")
+                gameOver = True
+                break;
                
         if (pause):
             continue
@@ -490,13 +497,14 @@ def main(winstyle=0):
         # get continuous keystrokes
         keystate = pg.key.get_pressed()
         if keystate[pg.K_DOWN]:
-            currentPill.applyGravity()
+            currentPill.moveDown()
 
         # clear/erase the last drawn sprites
         all.clear(screen, background)
 
         # update all the sprites
         all.update(clock.get_time())
+        all.update(dt)
 
         # draw the scene
         dirty = all.draw(screen)
