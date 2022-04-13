@@ -468,6 +468,10 @@ def main(winstyle=0):
 				item = gameBoard[row][col]
 				if type(item) is HalfPill:
 					item.splitFromPartner()
+				elif type(item) is Virus:
+					numViruses -= 1
+					if (numViruses < 0):
+						logging.error("Number of viruses < 0!")
 				item.kill()
 				gameBoard[row][col] = None
 			# generate a new pill
@@ -477,6 +481,10 @@ def main(winstyle=0):
 				print("GAME OVER")
 				gameOver = True
 				break;
+			if numViruses < 1:
+				print("YOU WIN!")
+				gameOver = True
+				break
 			   
 		if (pause):
 			continue
