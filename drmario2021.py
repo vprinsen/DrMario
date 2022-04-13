@@ -55,7 +55,7 @@ GAMESPEED = 1000
 LEVEL = 0
 
 # generate the game board
-gameBoard = np.zeros((16,8))
+gameBoard = [[None for j in range(BOARD_COLS)] for i in range(BOARD_ROWS)]
 
 main_dir = os.path.split(os.path.abspath(__file__))[0]
 
@@ -89,21 +89,21 @@ def load_image_from_spritesheet(spritesheet, rect):
 
 def isColliding(row, col):
     """checks for pill collision at row,col""" 
-    if gameBoard[row][col] != 0:
+    if gameBoard[row][col] != None:
         return True
     return False
 
 def resolveGameBoard():
     matchedPillLocations = []
-    """check for horizontal/vertical color matches"""
+    """check for horizontal/vertical colour matches"""
     for row in range(0,BOARD_ROWS):
         for col in range(0,BOARD_COLS):
-            if gameBoard[row][col] != 0:
+            if gameBoard[row][col] != None:
                 # space containing a pill half
-                matchColor = gameBoard[row][col]
+                matchColour = gameBoard[row][col].colour
                 i = 0
                 # continue until we hit the bottom of the board or a non-matching space
-                while row+i < BOARD_ROWS and gameBoard[row+i][col] == matchColor:
+                while row+i < BOARD_ROWS and gameBoard[row+i][col] != None and gameBoard[row+i][col].colour == matchColour:
                     i += 1
                 # check if we matched a long-enough string of pills 
                 if (i >= MATCH_COUNT):
@@ -113,7 +113,7 @@ def resolveGameBoard():
                             matchedPillLocations.append((row+m,col))                
                 i = 0
                 # continue until we hit the side of the board or a non-matching space
-                while col+i < BOARD_COLS and gameBoard[row][col+i] == matchColor:
+                while col+i < BOARD_COLS and gameBoard[row][col+i] != None and gameBoard[row][col+i].colour == matchColour:
                     i += 1
                 # check if we matched a long-enough string of pills 
                 if (i >= MATCH_COUNT):
@@ -131,12 +131,12 @@ class Virus(pg.sprite.Sprite):
         self.frame = 1
         self.animcycle = 2
         self.animTimer = 0
-        self.color = random.choice(list(Colour))
-        if (self.color == Colour.RED):
+        self.colour = random.choice(list(Colour))
+        if (self.colour == Colour.RED):
             self.image = self.redVirusImages[self.frame // self.animcycle % 2]
-        elif (self.color == Colour.YELLOW):
+        elif (self.colour == Colour.YELLOW):
             self.image = self.yellowVirusImages[self.frame // self.animcycle % 2]
-        elif (self.color == Colour.BLUE):
+        elif (self.colour == Colour.BLUE):
             self.image = self.blueVirusImages[self.frame // self.animcycle % 2]
         else:
             logging.error("Virus init returned an invalid colour")
@@ -145,8 +145,8 @@ class Virus(pg.sprite.Sprite):
         while (1):
             row = random.randint(virusEligibleRect.x, virusEligibleRect.x + virusEligibleRect.height - 1) 
             col = random.randint(0,virusEligibleRect.width - 1)
-            if gameBoard[row][col] == 0:
-                gameBoard[row][col] = self.color.value + 1
+            if gameBoard[row][col] == None:
+                gameBoard[row][col] = self
                 break;
         
         self.rect = self.image.get_rect()
@@ -160,11 +160,11 @@ class Virus(pg.sprite.Sprite):
             self.animTimer = 0
             self.frame += 1
             self.animcycle = 2
-            if (self.color == Colour.RED):
+            if (self.colour == Colour.RED):
                 self.image = self.redVirusImages[self.frame // self.animcycle % 2]
-            elif (self.color == Colour.YELLOW):
+            elif (self.colour == Colour.YELLOW):
                 self.image = self.yellowVirusImages[self.frame // self.animcycle % 2]
-            elif (self.color == Colour.BLUE):
+            elif (self.colour == Colour.BLUE):
                 self.image = self.blueVirusImages[self.frame // self.animcycle % 2]
             else:
                 logging.error("Virus update returned an invalid colour")
@@ -285,7 +285,7 @@ class HalfPill(pg.sprite.Sprite):
         pg.sprite.Sprite.__init__(self, self.containers)
         self.partner = partner
         self.orient = pillOrientation
-        self.color = random.choice(list(Colour))
+        self.colour = random.choice(list(Colour))
         self.image = self.buildPill() 
         self.rect = self.image.get_rect()
         self.row = START_ROW if (self.partner == None or self.orient == Orientation.HORIZONTAL) else START_ROW + 1
@@ -307,8 +307,8 @@ class HalfPill(pg.sprite.Sprite):
         self.rect.left = (self.col * 16) + PLAYABLERECT.x
     def buildPill(self):
         halfPillImage = pg.Surface(HALFPILLSIZE.size)
-        halfPillImage.blit(self.images[self.color.value], (1,1))
-        halfPillImage.blit(pg.transform.flip(self.images[self.color.value], flip_x=False, flip_y=True), (1,15))
+        halfPillImage.blit(self.images[self.colour.value], (1,1))
+        halfPillImage.blit(pg.transform.flip(self.images[self.colour.value], flip_x=False, flip_y=True), (1,15))
         return halfPillImage
     def moveLeft(self):
         self.col -= 1
@@ -318,12 +318,12 @@ class HalfPill(pg.sprite.Sprite):
         if (self.partner is not None):
             self.row += 1
         if (self.partner == None and self.row < BOARD_ROWS - 1 and not isColliding(self.row+1,self.col)):
-            gameBoard[self.row][self.col] = 0
+            gameBoard[self.row][self.col] = None
             self.row += 1
-            gameBoard[self.row][self.col] = self.color.value + 1
+            gameBoard[self.row][self.col] = self
     def settle(self):
         """called when the pill can't fall any further and must lock in place"""
-        gameBoard[self.row][self.col] = self.color.value + 1
+        gameBoard[self.row][self.col] = self
     def print_position(self):
         logging.debug("Position: (%d,%d)", self.row, self.col)
 
@@ -468,7 +468,7 @@ def main(winstyle=0):
                             settledPills.remove(pill)
                             currentBoard.remove(pill)
                             pill.kill()
-                            gameBoard[pill.row][pill.col] = 0
+                            gameBoard[pill.row][pill.col] = None
                             matchedPillLocations.remove((pill.row,pill.col))
                     # if (pill.partner == None):
                         # pill.applyGravity()
