@@ -15,8 +15,6 @@ Dr Mario (Pygame)
 
 import random
 import os
-import copy
-import numpy as np
 from enum import Enum
 
 # import basic pygame modules
