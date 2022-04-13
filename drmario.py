@@ -259,9 +259,17 @@ class Pill():
 	def rotate(self):
 		"""rotate the pill 90 degrees"""
 		if (self.orient == Orientation.HORIZONTAL):
-			"""right-hand side always rotates up"""
 			rightHalf = self.getRightHalf()
-			if not isColliding(rightHalf.row-1, rightHalf.col-1):
+			"""special handling if we're in the top row (rotate away from the ceiling)"""
+			if (rightHalf.row-1 < 0):
+				if not isColliding(rightHalf.row+1, rightHalf.col-1):
+					rightHalf.setPosition(rightHalf.row+1,rightHalf.col-1)
+					self.one.flipOrientation()
+					self.two.flipOrientation()
+					self.orient = Orientation.VERTICAL
+					return True				
+			elif not isColliding(rightHalf.row-1, rightHalf.col-1):
+				"""right-hand side rotates up"""
 				rightHalf.setPosition(rightHalf.row-1,rightHalf.col-1)
 				self.one.flipOrientation()
 				self.two.flipOrientation()
@@ -269,10 +277,19 @@ class Pill():
 				return True
 			return False
 		else:
-			"""rotate into the bottom half's row"""
 			topHalf = self.getTopHalf()
 			bottomHalf = self.getBottomHalf()
-			if not isColliding(bottomHalf.row,bottomHalf.col+1):
+			"""special handling if we're in the last column (rotate away from the wall)"""
+			if (bottomHalf.col+1 == BOARD_COLS):
+				if not isColliding(bottomHalf.row, bottomHalf.col-1):
+					topHalf.setPosition(bottomHalf.row, bottomHalf.col-1)
+					bottomHalf.setPosition(bottomHalf.row, bottomHalf.col)
+					self.one.flipOrientation()
+					self.two.flipOrientation()
+					self.orient = Orientation.HORIZONTAL
+					return True
+			elif not isColliding(bottomHalf.row,bottomHalf.col+1):
+				"""rotate counterclockwise into the bottom half's row"""
 				topHalf.setPosition(bottomHalf.row, bottomHalf.col)
 				bottomHalf.setPosition(bottomHalf.row, bottomHalf.col+1)
 				self.one.flipOrientation()
