@@ -221,7 +221,9 @@ class Pill():
             return None
         return self.one if (self.one.col > self.two.col) else self.two
     def moveDown(self):
-        self.applyGravity(0,True)
+        if (self.applyGravity(0,True) == False):
+            # if we hit something, set the timer so gravity triggers next frame 
+            self.applyGravity(PILL_GRAVITY_TIMER)
     def applyGravity(self, timeDelta, userInput = False):
         self.gravityTimer += timeDelta
         if (self.gravityTimer > PILL_GRAVITY_TIMER or userInput):
@@ -321,12 +323,7 @@ class HalfPill(pg.sprite.Sprite):
     def moveRight(self):
         self.col += 1
     def applyGravity(self):
-        if (self.partner is not None):
-            self.row += 1
-        if (self.partner == None and self.row < BOARD_ROWS - 1 and not isColliding(self.row+1,self.col)):
-            gameBoard[self.row][self.col] = None
-            self.row += 1
-            gameBoard[self.row][self.col] = self
+        self.row += 1
     def settle(self):
         """called when the pill can't fall any further and must lock in place"""
         gameBoard[self.row][self.col] = self
