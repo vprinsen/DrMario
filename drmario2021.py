@@ -37,7 +37,6 @@ NESRECT = pg.Rect(0, 0, 256, 240)
 SPRITERATIO = 2
 MOVEINCREMENT = 16
 FRAME_RATE = 30
-#PILLRECT = pg.Rect(0, 0, 8, 8)
 PILLSIZE = pg.Rect(0, 0, 16, 32) 
 HALFPILLSIZE = pg.Rect(0, 0, 16, 16)
 BOARD_ROWS = 16
@@ -95,15 +94,34 @@ def isColliding(row, col):
     return False
 
 def resolveGameBoard():
+    matchedPillLocations = []
     """check for horizontal/vertical color matches"""
-    for row in range(0,BOARD_ROWS-MATCH_COUNT+1):
-        for col in range(0,BOARD_COLS):
-            if gameBoard[row][col] != 0 and gameBoard[row][col] == gameBoard[row+1][col] and gameBoard[row][col] == gameBoard[row+2][col] and gameBoard[row][col] == gameBoard[row+3][col]:
-                logging.info("Vertical match starting at %d,%d", row, col) 
     for row in range(0,BOARD_ROWS):
-        for col in range(0,BOARD_COLS-MATCH_COUNT+1):
-            if gameBoard[row][col] != 0 and gameBoard[row][col] == gameBoard[row][col+1] and gameBoard[row][col] == gameBoard[row][col+2] and gameBoard[row][col] == gameBoard[row][col+3]:
-                logging.info("Horizontal match starting at %d,%d", row, col) 
+        for col in range(0,BOARD_COLS):
+            if gameBoard[row][col] != 0:
+                # space containing a pill half
+                matchColor = gameBoard[row][col]
+                i = 0
+                # continue until we hit the bottom of the board or a non-matching space
+                while row+i < BOARD_ROWS and gameBoard[row+i][col] == matchColor:
+                    i += 1
+                # check if we matched a long-enough string of pills 
+                if (i >= MATCH_COUNT):
+                    logging.info("Vertical match starting at %d,%d", row, col)
+                    for m in range(0,i):
+                        if ((row+m,col) not in matchedPillLocations):
+                            matchedPillLocations.append((row+m,col))                
+                i = 0
+                # continue until we hit the side of the board or a non-matching space
+                while col+i < BOARD_COLS and gameBoard[row][col+i] == matchColor:
+                    i += 1
+                # check if we matched a long-enough string of pills 
+                if (i >= MATCH_COUNT):
+                    logging.info("Horizontal match starting at %d,%d", row, col)
+                    for m in range(0,i):
+                        if ((row,col+m) not in matchedPillLocations):
+                            matchedPillLocations.append((row,col+m))      
+    return matchedPillLocations    
 
 # Classes
 
@@ -241,7 +259,6 @@ class Pill():
             rightHalf = self.getRightHalf()
             if not isColliding(rightHalf.row-1, rightHalf.col-1):
                 rightHalf.setPosition(rightHalf.row-1,rightHalf.col-1)
-                print(rightHalf.row, rightHalf.col)
                 self.one.flipOrientation()
                 self.two.flipOrientation()
                 self.orient = Orientation.VERTICAL
@@ -273,10 +290,10 @@ class HalfPill(pg.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.row = START_ROW if (self.partner == None or self.orient == Orientation.HORIZONTAL) else START_ROW + 1
         self.col = START_COL if (self.partner == None or self.orient == Orientation.VERTICAL) else START_COL - 1
-        self.settled = False
     def splitFromPartner(self):
-        self.partner = None 
-        self.settled = False
+        if (self.partner != None):
+            self.partner.partner = None
+            self.partner = None
     def setPartner(self, partnerHalf):
         self.partner = partnerHalf
     def setPosition(self, row, col):
@@ -307,10 +324,6 @@ class HalfPill(pg.sprite.Sprite):
     def settle(self):
         """called when the pill can't fall any further and must lock in place"""
         gameBoard[self.row][self.col] = self.color.value + 1
-        self.settled = True
-        # check for matches
-        resolveGameBoard()
-        return True
     def print_position(self):
         logging.debug("Position: (%d,%d)", self.row, self.col)
 
@@ -446,16 +459,24 @@ def main(winstyle=0):
                 if (currentPill.applyGravity() == False):
                     # add the current pill to the fixed board and spawn a new pill
                     currentPill.settle(currentBoard, settledPills)
+                    # check for matches
+                    matchedPillLocations = resolveGameBoard()
+                    # clear matches
+                    for pill in settledPills:
+                        if (pill.row,pill.col) in matchedPillLocations:
+                            pill.splitFromPartner()
+                            settledPills.remove(pill)
+                            matchedPillLocations.remove((pill.row,pill.col))
+
+                        if (pill.partner == None):
+                            pill.applyGravity()
+                    # generate a new pill
                     currentPill = Pill()
                     # if our newly-spawned pill is colliding, the board is full and we lost
                     if currentPill.isColliding():
                         print("GAME OVER")
                         gameOver = True
                         break;
-                for pill in settledPills:
-                    pill.splitFromPartner()
-                    if (pill.partner == None):
-                        pill.applyGravity()
                
         if (pause):
             continue
