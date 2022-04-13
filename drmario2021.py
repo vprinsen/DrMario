@@ -503,7 +503,6 @@ def main(winstyle=0):
         all.clear(screen, background)
 
         # update all the sprites
-        all.update(clock.get_time())
         all.update(dt)
 
         # draw the scene
