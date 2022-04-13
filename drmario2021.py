@@ -466,10 +466,12 @@ def main(winstyle=0):
                         if (pill.row,pill.col) in matchedPillLocations:
                             pill.splitFromPartner()
                             settledPills.remove(pill)
+                            currentBoard.remove(pill)
+                            pill.kill()
+                            gameBoard[pill.row][pill.col] = 0
                             matchedPillLocations.remove((pill.row,pill.col))
-
-                        if (pill.partner == None):
-                            pill.applyGravity()
+                    # if (pill.partner == None):
+                        # pill.applyGravity()
                     # generate a new pill
                     currentPill = Pill()
                     # if our newly-spawned pill is colliding, the board is full and we lost
