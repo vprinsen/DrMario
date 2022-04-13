@@ -252,14 +252,12 @@ class Pill():
 			logging.error("Called getBottomHalf but pill is in horizontal orientation!")
 			return None
 		return self.one if (self.one.row > self.two.row) else self.two
-	def settle(self, currentBoard, settledPills):
+	def settle(self, currentBoard):
 		"""called when the pill can't fall any further and must lock in place"""
 		currentBoard.add(self.one)
 		currentBoard.add(self.two)
 		self.one.settle()
 		self.two.settle()
-		settledPills.add(self.one)
-		settledPills.add(self.two)
 	def rotate(self):
 		"""rotate the pill 90 degrees"""
 		if (self.orient == Orientation.HORIZONTAL):
@@ -393,7 +391,6 @@ def main(winstyle=0):
 	pg.display.flip()
 
 	# Initialize Game Groups
-	settledPills = pg.sprite.Group()
 	currentBoard = pg.sprite.Group()
 	all = pg.sprite.RenderUpdates()
 
@@ -462,20 +459,17 @@ def main(winstyle=0):
 		# apply gravity
 		if (currentPill.applyGravity(dt) == False):
 			# add the current pill to the fixed board and spawn a new pill
-			currentPill.settle(currentBoard, settledPills)
+			currentPill.settle(currentBoard)
 			# check for matches
 			matchedPillLocations = resolveGameBoard()
 			# clear matches
-			for pill in settledPills:
-				if (pill.row,pill.col) in matchedPillLocations:
-					pill.splitFromPartner()
-					settledPills.remove(pill)  
-					currentBoard.remove(pill)
-					pill.kill()
-					gameBoard[pill.row][pill.col] = None
-					matchedPillLocations.remove((pill.row,pill.col))
-			# if (pill.partner == None):
-				# pill.applyGravity()
+			while (matchedPillLocations):
+				(row,col) = matchedPillLocations.pop()
+				item = gameBoard[row][col]
+				if type(item) is HalfPill:
+					item.splitFromPartner()
+				item.kill()
+				gameBoard[row][col] = None
 			# generate a new pill
 			currentPill = Pill()
 			# if our newly-spawned pill is colliding, the board is full and we lost
