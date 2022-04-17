@@ -85,6 +85,23 @@ def load_image_from_spritesheet(spritesheet, rect):
 	image.blit(spritesheet, (0, 0), rect)
 	return image
 
+def printGameBoard( mode = "simple" ):
+	print('-------------------')
+	if mode == "objects":
+		for row in range(0,BOARD_ROWS):
+			print(gameBoard[row])
+	if mode == "simple":
+		for row in range(0,BOARD_ROWS):
+			for col in range(0,BOARD_COLS):
+				output = '0'
+				if type(gameBoard[row][col]) is HalfPill:
+					output = 'P'
+				if type(gameBoard[row][col]) is Virus:
+					output = 'V'
+				print(output, end = ' ')
+			print()
+	print('-------------------')
+
 def isColliding(row, col):
 	"""checks for pill collision at row,col""" 
 	if gameBoard[row][col] != None:
@@ -92,6 +109,37 @@ def isColliding(row, col):
 	return False
 
 def resolveGameBoard():
+	continueResolving = False
+	for row in reversed(range(0,BOARD_ROWS)):
+		for col in reversed(range(0,BOARD_COLS)):
+			if gameBoard[row][col] != None and type(gameBoard[row][col]) is HalfPill:
+				# space containing a pill half
+				if (gameBoard[row][col].partner != None):
+					if (gameBoard[row][col].canFall() and gameBoard[row][col].partner.canFall()):
+						# update internal position of two halves 
+						gameBoard[row][col].row += 1
+						gameBoard[row][col].partner.row += 1
+						# update gameboard for pill half
+						gameBoard[row+1][col] = gameBoard[row][col]
+						gameBoard[row][col] = None
+						# update gameboard for pill half's partner
+						partnerRow = gameBoard[row][col].partner.row
+						partnerCol = gameBoard[row][col].partner.col
+						gameBoard[partnerRow+1][partnerCol] = gameBoard[partnerRow][partnerCol]
+						gameBoard[partnerRow][partnerCol] = None
+						# run another resolve check
+						continueResolving = True
+				elif (gameBoard[row][col].canFall()):
+					# update internal position
+					gameBoard[row][col].row += 1
+					# update gameboard
+					gameBoard[row+1][col] = gameBoard[row][col]
+					gameBoard[row][col] = None
+					# run another resolve check
+					continueResolving = True
+	return continueResolving
+
+def findMatches():
 	matchedPillLocations = []
 	"""check for horizontal/vertical colour matches"""
 	for row in range(0,BOARD_ROWS):
@@ -219,7 +267,7 @@ class Pill():
 			return None
 		return self.one if (self.one.col > self.two.col) else self.two
 	def moveDown(self):
-		if (self.applyGravity(0,True) == False):
+		if (self.applyGravity(timeDelta = 0, userInput = True) == False):
 			# if we hit something, set the timer so gravity triggers next frame 
 			self.applyGravity(PILL_GRAVITY_TIMER)
 	def applyGravity(self, timeDelta, userInput = False):
@@ -229,13 +277,13 @@ class Pill():
 			"""check for collision below and move the pill halves"""
 			if (self.orient == Orientation.VERTICAL):
 				bottomHalf = self.getBottomHalf()
-				if (bottomHalf and bottomHalf.row < BOARD_ROWS - 1 and not isColliding(bottomHalf.row+1,bottomHalf.col)):
+				if (bottomHalf and bottomHalf.canFall()):
 					self.one.applyGravity()
 					self.two.applyGravity()
 					return True
 				return False
 			elif (self.orient == Orientation.HORIZONTAL):
-				if (self.one.row < BOARD_ROWS - 1 and not isColliding(self.one.row+1,self.one.col) and not isColliding(self.two.row+1,self.two.col)):
+				if (self.one.canFall() and self.two.canFall()):
 					self.one.applyGravity()
 					self.two.applyGravity()
 					return True
@@ -335,13 +383,19 @@ class HalfPill(pg.sprite.Sprite):
 		self.col -= 1
 	def moveRight(self):
 		self.col += 1
-	def applyGravity(self):
+	def applyGravity(self, updateGameBoard = False):
+		if (updateGameBoard):
+			gameBoard[self.row][self.col] = None
+			gameBoard[self.row+1][self.col] = self
 		self.row += 1
 	def settle(self):
 		"""called when the pill can't fall any further and must lock in place"""
 		gameBoard[self.row][self.col] = self
 	def print_position(self):
 		logging.debug("Position: (%d,%d)", self.row, self.col)
+	def canFall(self):
+		return (self.row < BOARD_ROWS - 1) and not isColliding(self.row+1,self.col)
+
 
 
 def main(winstyle=0):
@@ -417,6 +471,7 @@ def main(winstyle=0):
 	clock = pg.time.Clock()
 	pause = False
 	gameOver = False
+	resolveNeeded = False
 
 	# spawn some viruses on the board
 	numViruses = min(4 + (LEVEL * 4), 84)
@@ -425,8 +480,6 @@ def main(winstyle=0):
 	logging.info("Using %d rows at level %d", rowsToUse, LEVEL)
 	virusEligibleRect = pg.Rect(BOARD_ROWS - rowsToUse,0,8,rowsToUse)   
 	[currentBoard.add(Virus(virusEligibleRect)) for x in range(0,numViruses)]
-
-#    print(gameBoard)
 
 	# spawn our first pill
 	currentPill = Pill()
@@ -470,13 +523,35 @@ def main(winstyle=0):
 				#     currentPill.applyGravity()
 				if event.key == pg.K_SPACE:
 					currentPill.rotate()
+				if pause and event.key == pg.K_d:
+					printGameBoard()
+
+		if (resolveNeeded and not pause):
+			# something was cleared last frame, let remaining pills settle 
+			# into new positions before spawning new ones
+			if not resolveGameBoard():
+				resolveNeeded = False
+				# generate a new pill
+				currentPill = Pill()
+				# if our newly-spawned pill is colliding, the board is full and we lost
+				if currentPill.isColliding():
+					print("GAME OVER")
+					gameOver = True
+					break;
+				if numViruses < 1:
+					print("YOU WIN!")
+					gameOver = True
+					break
+
+		if (pause):
+			continue
 
 		# apply gravity
 		if (currentPill.applyGravity(dt) == False):
 			# add the current pill to the fixed board and spawn a new pill
 			currentPill.settle(currentBoard)
 			# check for matches
-			matchedPillLocations = resolveGameBoard()
+			matchedPillLocations = findMatches()
 			# clear matches
 			while (matchedPillLocations):
 				(row,col) = matchedPillLocations.pop()
@@ -489,20 +564,8 @@ def main(winstyle=0):
 						logging.error("Number of viruses < 0!")
 				item.kill()
 				gameBoard[row][col] = None
-			# generate a new pill
-			currentPill = Pill()
-			# if our newly-spawned pill is colliding, the board is full and we lost
-			if currentPill.isColliding():
-				print("GAME OVER")
-				gameOver = True
-				break;
-			if numViruses < 1:
-				print("YOU WIN!")
-				gameOver = True
-				break
+			resolveNeeded = True
 			   
-		if (pause):
-			continue
 		if (gameOver):
 			# TODO  game over handling
 			clock.tick(2000)
