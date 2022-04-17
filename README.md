@@ -9,10 +9,10 @@ Python 3.x
 Pygame  
  
 **Controls:**  
-← → ↓: move
-SPACE: rotate
-P: pause
-ESC: quit  
+← → ↓: move  
+SPACE: rotate  
+P: pause  
+ESC: quit   
 
 Speed and level can be configured in drmario.py.
 
