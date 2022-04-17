@@ -305,8 +305,8 @@ class Pill():
 		"""rotate the pill 90 degrees"""
 		if (self.orient == Orientation.HORIZONTAL):
 			rightHalf = self.getRightHalf()
-			"""special handling if we're in the top row (rotate away from the ceiling)"""
-			if (rightHalf.row-1 < 0):
+			"""allow rotation in the other direction in certain cases"""
+			if (rightHalf.row-1 < 0) or isColliding(rightHalf.row-1, rightHalf.col-1):
 				if not isColliding(rightHalf.row+1, rightHalf.col-1):
 					rightHalf.setPosition(rightHalf.row+1,rightHalf.col-1)
 					self.one.flipOrientation()
@@ -324,8 +324,8 @@ class Pill():
 		else:
 			topHalf = self.getTopHalf()
 			bottomHalf = self.getBottomHalf()
-			"""special handling if we're in the last column (rotate away from the wall)"""
-			if (bottomHalf.col+1 == BOARD_COLS):
+			"""allow rotation in the other direction in certain cases"""
+			if (bottomHalf.col+1 == BOARD_COLS) or isColliding(bottomHalf.row,bottomHalf.col+1):
 				if not isColliding(bottomHalf.row, bottomHalf.col-1):
 					topHalf.setPosition(bottomHalf.row, bottomHalf.col-1)
 					bottomHalf.setPosition(bottomHalf.row, bottomHalf.col)
