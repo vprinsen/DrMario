@@ -12,8 +12,6 @@ SPACE: rotate
 P: pause
 ESC: quit  
 
-![Demo gif](tetris_v3_demo.gif)
-
 ![animated gif demo of application](DrMario.gif)
 
 Sprites from: https://www.spriters-resource.com/nes/drmario/
