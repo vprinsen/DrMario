@@ -131,7 +131,7 @@ def resolveGameBoard():
 						pillHalf.applyGravity()
 						pillPartner.applyGravity()
 						# resolve again next frame
-						continueResolving
+						continueResolving = True
 					gameBoard[pillHalf.row][pillHalf.col] = pillHalf
 					gameBoard[pillPartner.row][pillPartner.col] = pillPartner
 	return continueResolving
