@@ -11,6 +11,8 @@
 
 Dr Mario (Pygame)
 
+# @Author: V.K. Prinsen
+
 """
 
 import random
