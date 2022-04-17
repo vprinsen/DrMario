@@ -111,6 +111,7 @@ def isColliding(row, col):
 	return False
 
 def resolveGameBoard():
+	"""checks for any pills that should fall after a clear"""
 	continueResolving = False
 	for row in reversed(range(0,BOARD_ROWS)):
 		for col in reversed(range(0,BOARD_COLS)):
@@ -139,8 +140,8 @@ def resolveGameBoard():
 	return continueResolving
 
 def findMatches():
+	"""checks for horizontal/vertical colour matches"""
 	matchedPillLocations = []
-	"""check for horizontal/vertical colour matches"""
 	for row in range(0,BOARD_ROWS):
 		for col in range(0,BOARD_COLS):
 			if gameBoard[row][col] != None:
@@ -215,7 +216,7 @@ class Virus(pg.sprite.Sprite):
 				logging.error("Virus update returned an invalid colour")
 
 class Pill():
-	"""a pill is composed of two halves"""
+	"""a pill is composed of two HalfPills and contains most player control logic"""
 	def __init__(self):
 		self.orient = Orientation.HORIZONTAL
 		self.one = HalfPill(self.orient)
@@ -391,7 +392,6 @@ class HalfPill(pg.sprite.Sprite):
 		logging.debug("Position: (%d,%d)", self.row, self.col)
 	def canFall(self):
 		return (self.row < BOARD_ROWS - 1) and not isColliding(self.row+1,self.col)
-
 
 
 def main(winstyle=0):
