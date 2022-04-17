@@ -14,6 +14,8 @@ SPACE: rotate
 P: pause
 ESC: quit  
 
+Speed and level can be configured in drmario.py.
+
 ![animated gif demo of application](DrMario.gif)
 
 Sprites from: https://www.spriters-resource.com/nes/drmario/
