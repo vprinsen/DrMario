@@ -114,29 +114,26 @@ def resolveGameBoard():
 		for col in reversed(range(0,BOARD_COLS)):
 			if gameBoard[row][col] != None and type(gameBoard[row][col]) is HalfPill:
 				# space containing a pill half
-				if (gameBoard[row][col].partner != None):
-					if (gameBoard[row][col].canFall() and gameBoard[row][col].partner.canFall()):
-						# update internal position of two halves 
-						gameBoard[row][col].row += 1
-						gameBoard[row][col].partner.row += 1
-						# update gameboard for pill half
-						gameBoard[row+1][col] = gameBoard[row][col]
-						gameBoard[row][col] = None
-						# update gameboard for pill half's partner
-						partnerRow = gameBoard[row][col].partner.row
-						partnerCol = gameBoard[row][col].partner.col
-						gameBoard[partnerRow+1][partnerCol] = gameBoard[partnerRow][partnerCol]
-						gameBoard[partnerRow][partnerCol] = None
-						# run another resolve check
-						continueResolving = True
-				elif (gameBoard[row][col].canFall()):
-					# update internal position
-					gameBoard[row][col].row += 1
-					# update gameboard
-					gameBoard[row+1][col] = gameBoard[row][col]
+				pillHalf = gameBoard[row][col]
+				pillPartner = pillHalf.partner
+				if pillPartner == None:
 					gameBoard[row][col] = None
-					# run another resolve check
-					continueResolving = True
+					if pillHalf.canFall(): 
+						pillHalf.applyGravity()
+						continueResolving = True
+					gameBoard[pillHalf.row][pillHalf.col] = pillHalf
+				else:
+					if pillHalf.canFall() and (pillPartner.col == pillHalf.col or pillPartner.canFall()):
+						# nullify existing positions
+						gameBoard[row][col] = None
+						gameBoard[pillPartner.row][pillPartner.col] = None
+						# move down
+						pillHalf.applyGravity()
+						pillPartner.applyGravity()
+						# resolve again next frame
+						continueResolving
+					gameBoard[pillHalf.row][pillHalf.col] = pillHalf
+					gameBoard[pillPartner.row][pillPartner.col] = pillPartner
 	return continueResolving
 
 def findMatches():
@@ -384,9 +381,6 @@ class HalfPill(pg.sprite.Sprite):
 	def moveRight(self):
 		self.col += 1
 	def applyGravity(self, updateGameBoard = False):
-		if (updateGameBoard):
-			gameBoard[self.row][self.col] = None
-			gameBoard[self.row+1][self.col] = self
 		self.row += 1
 	def settle(self):
 		"""called when the pill can't fall any further and must lock in place"""
@@ -486,6 +480,9 @@ def main(winstyle=0):
 
 	# start game loop
 	while (1):
+		# frame init
+		matchedPillLocations = []
+
 		# get time delta since last tick
 		dt = clock.get_time()
 
@@ -515,66 +512,77 @@ def main(winstyle=0):
 					fullscreen = not fullscreen
 				if event.key == pg.K_p:
 					pause = not pause
-				if event.key == pg.K_LEFT:
-				   currentPill.moveLeft()
-				if event.key == pg.K_RIGHT:
-					currentPill.moveRight()
-				# if event.key == pg.K_DOWN:
-				#     currentPill.applyGravity()
-				if event.key == pg.K_SPACE:
-					currentPill.rotate()
-				if pause and event.key == pg.K_d:
-					printGameBoard()
-
-		if (resolveNeeded and not pause):
-			# something was cleared last frame, let remaining pills settle 
-			# into new positions before spawning new ones
-			if not resolveGameBoard():
-				resolveNeeded = False
-				# generate a new pill
-				currentPill = Pill()
-				# if our newly-spawned pill is colliding, the board is full and we lost
-				if currentPill.isColliding():
-					print("GAME OVER")
-					gameOver = True
-					break;
-				if numViruses < 1:
-					print("YOU WIN!")
-					gameOver = True
-					break
+				if event.key == pg.K_d:
+					printGameBoard()	# for debug
+				if not pause and not resolveNeeded:
+					if event.key == pg.K_LEFT:
+					   currentPill.moveLeft()
+					if event.key == pg.K_RIGHT:
+						currentPill.moveRight()
+					# if event.key == pg.K_DOWN:
+					#     currentPill.applyGravity()
+					if event.key == pg.K_SPACE:
+						currentPill.rotate()
 
 		if (pause):
 			continue
 
+		# get continuous keystrokes
+		keystate = pg.key.get_pressed()
+		if currentPill and keystate[pg.K_DOWN]:
+			currentPill.moveDown()
+
 		# apply gravity
-		if (currentPill.applyGravity(dt) == False):
-			# add the current pill to the fixed board and spawn a new pill
+		if (currentPill and currentPill.applyGravity(dt) == False):
+			# add the current pill to the fixed board
 			currentPill.settle(currentBoard)
+			currentPill = None
 			# check for matches
 			matchedPillLocations = findMatches()
-			# clear matches
-			while (matchedPillLocations):
-				(row,col) = matchedPillLocations.pop()
-				item = gameBoard[row][col]
-				if type(item) is HalfPill:
-					item.splitFromPartner()
-				elif type(item) is Virus:
-					numViruses -= 1
-					if (numViruses < 0):
-						logging.error("Number of viruses < 0!")
-				item.kill()
-				gameBoard[row][col] = None
+			if (matchedPillLocations):
+				resolveNeeded = True
+
+		# nothing to resolve and no active pill
+		if not resolveNeeded and currentPill == None:
+			# spawn a new pill
+			currentPill = Pill()
+			# if our newly-spawned pill is colliding, the board is full and we lost
+			if currentPill.isColliding():
+				print("GAME OVER")
+				gameOver = True
+				break;
+			if numViruses < 1:
+				print("YOU WIN!")
+				gameOver = True
+				break
+
+		# game board is not resolved yet, let remaining pills settle 
+		# into new positions before spawning a new pill
+		if resolveNeeded:
+			# check if anything else can move
+			if not resolveGameBoard():
+				resolveNeeded = False
+				# check for matches
+				matchedPillLocations = findMatches()
+		
+		# clear matches
+		while (matchedPillLocations):
+			(row,col) = matchedPillLocations.pop()
+			item = gameBoard[row][col]
+			if type(item) is HalfPill:
+				item.splitFromPartner()
+			elif type(item) is Virus:
+				numViruses -= 1
+				if (numViruses < 0):
+					logging.error("Number of viruses < 0!")
+			item.kill()
+			gameBoard[row][col] = None
 			resolveNeeded = True
 			   
 		if (gameOver):
 			# TODO  game over handling
 			clock.tick(2000)
 			break
-
-		# get continuous keystrokes
-		keystate = pg.key.get_pressed()
-		if keystate[pg.K_DOWN]:
-			currentPill.moveDown()
 
 		# clear/erase the last drawn sprites
 		all.clear(screen, background)
